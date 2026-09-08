@@ -95,11 +95,14 @@ void append_id3_text_frame(std::vector<uint8_t>& tag, const char (&id)[5],
     tag.insert(tag.end(), text.begin(), text.end());
 }
 
-std::vector<uint8_t> build_id3_tag() {
+std::vector<uint8_t> build_id3_tag(uint64_t duration_ms) {
     std::vector<uint8_t> frames;
     append_id3_text_frame(frames, "TIT2", "Spotify");
     append_id3_text_frame(frames, "TPE1", "GTA V Radio");
     append_id3_text_frame(frames, "TALB", "GTA Spotify Radio");
+    // Scanners that trust TLEN rather than parsing every frame still get a
+    // sensible duration out of the file.
+    append_id3_text_frame(frames, "TLEN", std::to_string(duration_ms));
 
     const uint32_t size = static_cast<uint32_t>(frames.size());
     std::vector<uint8_t> tag{uint8_t{'I'}, uint8_t{'D'}, uint8_t{'3'},
@@ -183,49 +186,84 @@ SilentTrackResult ensure_silent_track(const std::filesystem::path& user_music_di
 
     result.path = user_music_dir / "00 GTA Spotify Radio (silence).mp3";
 
+    // MPEG-1 Layer III, 48000 Hz, 64 kbit/s, mono. An all-zero side info
+    // block means zero spectral coefficients, which every decoder renders as
+    // digital silence. 48 kHz is deliberate: 144 * 64000 / 48000 is exactly
+    // 192, so every frame is the same size and the stream never needs the
+    // padding bit. At 44.1 kHz frames would be 208.98 bytes, and a fixed 208
+    // leaves the file slightly under its nominal bitrate, which makes any
+    // scanner that estimates duration from size disagree with the tag.
+    constexpr uint8_t kHeader[4] = {0xFF, 0xFB, 0x54, 0xC4};
+    constexpr size_t kFrameBytes = 192;
+    constexpr size_t kSamplesPerFrame = 1152;
+    constexpr size_t kSampleRate = 48000;
+
+    const size_t frame_count = static_cast<size_t>(minutes) * 60 * kSampleRate /
+                               kSamplesPerFrame;
+    const uint64_t duration_ms =
+        static_cast<uint64_t>(frame_count) * kSamplesPerFrame * 1000 / kSampleRate;
+    const std::vector<uint8_t> tag = build_id3_tag(duration_ms);
+    const uintmax_t expected_bytes = tag.size() + frame_count * kFrameBytes;
+
     std::error_code ec;
     if (std::filesystem::exists(result.path, ec)) {
-        result.ok = true;
-        result.detail = "placeholder already present";
-        return result;
+        // Only trust a file that is exactly what we would have written. A
+        // truncated one from an interrupted run would otherwise be kept
+        // forever, and the game would never index it.
+        const uintmax_t actual = std::filesystem::file_size(result.path, ec);
+        if (!ec && actual == expected_bytes) {
+            result.ok = true;
+            result.detail = "placeholder already present";
+            return result;
+        }
+        log::info("Rewriting placeholder: expected " + std::to_string(expected_bytes) +
+                  " bytes, found " + std::to_string(actual));
     }
-
-    // MPEG-1 Layer III, 44100 Hz, 64 kbit/s, mono. An all-zero side info
-    // block means zero spectral coefficients, which every decoder renders as
-    // digital silence.
-    constexpr uint8_t kHeader[4] = {0xFF, 0xFB, 0x50, 0xC4};
-    constexpr size_t kFrameBytes = 208;
-    constexpr double kFramesPerSecond = 44100.0 / 1152.0;
-
-    const size_t frame_count =
-        static_cast<size_t>(kFramesPerSecond * 60.0 * static_cast<double>(minutes));
 
     std::vector<uint8_t> frame(kFrameBytes, 0);
     std::memcpy(frame.data(), kHeader, sizeof(kHeader));
 
-    std::ofstream out(result.path, std::ios::binary | std::ios::trunc);
-    if (!out) {
-        result.detail = "could not write to the user music folder";
+    // Build under a temporary name and move it into place, so a failure part
+    // way through never leaves a half-written track for the game to find.
+    const std::filesystem::path temp = result.path.string() + ".part";
+    {
+        std::ofstream out(temp, std::ios::binary | std::ios::trunc);
+        if (!out) {
+            result.detail = "could not write to " + user_music_dir.string();
+            return result;
+        }
+        out.write(reinterpret_cast<const char*>(tag.data()),
+                  static_cast<std::streamsize>(tag.size()));
+        for (size_t i = 0; i < frame_count && out; ++i) {
+            out.write(reinterpret_cast<const char*>(frame.data()),
+                      static_cast<std::streamsize>(frame.size()));
+        }
+        if (!out) {
+            out.close();
+            std::filesystem::remove(temp, ec);
+            result.detail = "ran out of space writing the placeholder track";
+            return result;
+        }
+    }
+
+    const uintmax_t written = std::filesystem::file_size(temp, ec);
+    if (ec || written != expected_bytes) {
+        std::filesystem::remove(temp, ec);
+        result.detail = "placeholder track came out the wrong size";
         return result;
     }
 
-    const std::vector<uint8_t> tag = build_id3_tag();
-    out.write(reinterpret_cast<const char*>(tag.data()),
-              static_cast<std::streamsize>(tag.size()));
-    for (size_t i = 0; i < frame_count && out; ++i) {
-        out.write(reinterpret_cast<const char*>(frame.data()),
-                  static_cast<std::streamsize>(frame.size()));
-    }
-    out.close();
-
-    if (!std::filesystem::exists(result.path, ec)) {
-        result.detail = "writing the placeholder track failed";
+    std::filesystem::rename(temp, result.path, ec);
+    if (ec) {
+        std::filesystem::remove(temp, ec);
+        result.detail = "could not replace the placeholder track: " + ec.message();
         return result;
     }
 
     result.ok = true;
     result.created = true;
-    result.detail = "wrote " + std::to_string(minutes) + " minute placeholder";
+    result.detail = "wrote " + std::to_string(minutes) + " minute placeholder (" +
+                    std::to_string(expected_bytes) + " bytes)";
     log::info("Created Self Radio placeholder: " + result.path.string());
     return result;
 }
