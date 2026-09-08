@@ -1,0 +1,6 @@
+[submodule "vendor/librespotclib"]
+	path = vendor/librespotclib
+	url = https://github.com/matkhl/librespotclib.git
+[submodule "vendor/scripthookv-template"]
+	path = vendor/scripthookv-template
+	url = https://github.com/usrbinbryce/scripthookv_template.git

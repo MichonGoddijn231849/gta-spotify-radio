@@ -1,0 +1,21 @@
+# Build outputs
+/build*/
+/bin/
+/obj/
+/.vs/
+*.user
+*.suo
+*.log
+
+# Local tools and generated test media
+/vs_BuildTools.exe
+/silent-radio/
+/tools/
+
+# Spotify authentication and runtime data
+/test-cache/
+/GtaSpotifyRadio/
+credentials.dat
+
+# Packaged binaries
+*.zip
