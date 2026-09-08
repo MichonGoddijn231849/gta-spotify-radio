@@ -5,21 +5,75 @@
 #include <Windows.h>
 #include <ShlObj.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <cwctype>
 #include <fstream>
 #include <vector>
 
 namespace {
 
-std::filesystem::path documents_directory() {
+std::filesystem::path known_folder(REFKNOWNFOLDERID id) {
     PWSTR raw = nullptr;
-    if (FAILED(SHGetKnownFolderPath(FOLDERID_Documents, 0, nullptr, &raw))) {
-        return {};
-    }
+    if (FAILED(SHGetKnownFolderPath(id, 0, nullptr, &raw))) return {};
     std::filesystem::path path(raw);
     CoTaskMemFree(raw);
     return path;
+}
+
+// Documents can be redirected (OneDrive, a moved user folder), and the game
+// does not always end up under the same root the shell reports, so collect
+// every plausible one instead of trusting a single answer.
+std::vector<std::filesystem::path> documents_roots() {
+    std::vector<std::filesystem::path> roots;
+    const auto add = [&roots](std::filesystem::path path) {
+        if (path.empty()) return;
+        std::error_code ec;
+        if (!std::filesystem::is_directory(path, ec)) return;
+        for (const auto& existing : roots) {
+            if (existing == path) return;
+        }
+        roots.push_back(std::move(path));
+    };
+
+    add(known_folder(FOLDERID_Documents));
+
+    const std::filesystem::path profile = known_folder(FOLDERID_Profile);
+    if (!profile.empty()) {
+        add(profile / "Documents");
+        add(profile / "OneDrive" / "Documents");
+    }
+
+    wchar_t onedrive[MAX_PATH]{};
+    if (GetEnvironmentVariableW(L"OneDrive", onedrive, MAX_PATH) > 0) {
+        add(std::filesystem::path(onedrive) / "Documents");
+    }
+    return roots;
+}
+
+std::wstring to_lower(std::wstring value) {
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](wchar_t c) { return static_cast<wchar_t>(::towlower(c)); });
+    return value;
+}
+
+// Higher is a better guess at "this is the GTA install the player is running".
+int score_game_folder(const std::filesystem::path& folder) {
+    const std::wstring name = to_lower(folder.filename().wstring());
+    int score = 0;
+    if (name.find(L"gta") != std::wstring::npos ||
+        name.find(L"grand theft auto") != std::wstring::npos) {
+        score = 1;
+    }
+    if (score == 0) return 0;
+    if (name.find(L"enhanced") != std::wstring::npos) score = 3;
+    else if (name == L"gta v" || name == L"grand theft auto v") score = 2;
+
+    // An existing User Music folder is the strongest signal there is.
+    std::error_code ec;
+    if (std::filesystem::is_directory(folder / "User Music", ec)) score += 10;
+    return score;
 }
 
 void append_id3_text_frame(std::vector<uint8_t>& tag, const char (&id)[5],
@@ -63,31 +117,62 @@ std::filesystem::path find_user_music_dir(const std::wstring& override_dir) {
     if (!override_dir.empty()) {
         std::filesystem::path path(override_dir);
         std::filesystem::create_directories(path, ec);
+        log::info("Using UserMusicDir override: " + path.string());
         return path;
     }
 
-    const std::filesystem::path documents = documents_directory();
-    if (documents.empty()) return {};
+    std::filesystem::path best;
+    int best_score = 0;
 
-    const std::filesystem::path rockstar = documents / "Rockstar Games";
-    const wchar_t* game_folders[] = {L"GTA V Enhanced", L"GTA V"};
-    for (const wchar_t* folder : game_folders) {
-        const std::filesystem::path game = rockstar / folder;
-        if (!std::filesystem::is_directory(game, ec)) continue;
-        const std::filesystem::path music = game / "User Music";
-        if (!std::filesystem::is_directory(music, ec)) {
-            std::filesystem::create_directories(music, ec);
+    const std::vector<std::filesystem::path> roots = documents_roots();
+    if (roots.empty()) log::error("No Documents folder could be resolved");
+
+    for (const std::filesystem::path& root : roots) {
+        const std::filesystem::path rockstar = root / "Rockstar Games";
+        if (!std::filesystem::is_directory(rockstar, ec)) {
+            log::info("Probed (no Rockstar Games folder): " + root.string());
+            continue;
         }
-        if (std::filesystem::is_directory(music, ec)) return music;
+        log::info("Probing " + rockstar.string());
+
+        std::filesystem::directory_iterator it(rockstar, ec), end;
+        if (ec) {
+            log::error("Could not list " + rockstar.string() + ": " + ec.message());
+            continue;
+        }
+        for (; it != end; it.increment(ec)) {
+            if (ec) break;
+            if (!it->is_directory(ec)) continue;
+            const int score = score_game_folder(it->path());
+            log::info("  " + it->path().filename().string() +
+                      " (score " + std::to_string(score) + ")");
+            if (score > best_score) {
+                best_score = score;
+                best = it->path();
+            }
+        }
     }
-    return {};
+
+    if (best.empty()) return {};
+
+    log::info("Selected GTA folder: " + best.string());
+    const std::filesystem::path music = best / "User Music";
+    if (!std::filesystem::is_directory(music, ec)) {
+        std::filesystem::create_directories(music, ec);
+    }
+    if (!std::filesystem::is_directory(music, ec)) {
+        log::error("Could not create " + music.string());
+        return {};
+    }
+    return music;
 }
 
 SilentTrackResult ensure_silent_track(const std::filesystem::path& user_music_dir,
                                       int minutes) {
     SilentTrackResult result;
     if (user_music_dir.empty()) {
-        result.detail = "no GTA user music folder found";
+        result.detail = "no GTA user music folder found - set UserMusicDir in "
+                        "GtaSpotifyRadio.ini";
         return result;
     }
 

@@ -51,6 +51,13 @@ data.
 
 Everything below lives in `GtaSpotifyRadio.ini`.
 
+- **Self Radio never appears on the wheel** — open `GtaSpotifyRadio.log`. It
+  lists every Documents root it probed and every folder it found under
+  `Rockstar Games`. If it reports no user music folder, find the one GTA
+  actually reads and set `UserMusicDir` under `[SelfRadio]` to its full path.
+  Remember the one-time rescan in Settings > Audio after the placeholder is
+  written. If Self Radio does not exist in your build at all, switch to
+  `Mode=Replace`.
 - **Too quiet or too loud next to the other stations** — adjust `VolumeDb`
   under `[Audio]`. It is a straight dB trim on top of Spotify's loudness
   normalisation.
