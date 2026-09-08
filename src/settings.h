@@ -9,27 +9,34 @@ namespace gsr {
 
 // How the plugin claims a slot on the radio wheel.
 enum class StationMode {
-    // Ride on Self Radio (RADIO_19_USER). The native station plays a silent
-    // placeholder track, so the wheel entry, station art and the whole native
-    // radio state machine are real while this plugin supplies the audio.
-    SelfRadio,
     // Take over a normal station (for example RADIO_02_POP). The native
-    // station is frozen and muted through an audio scene while the plugin is
-    // tuned in, and restored when the player retunes away.
+    // station is silenced while the plugin is tuned in and restored when the
+    // player retunes away.
     Replace,
+    // Ride on Self Radio (RADIO_19_USER) with a silent placeholder track.
+    // This needs the game to index user music, which GTA V Enhanced does not
+    // do -- Self Radio stays off the wheel even with real MP3s present.
+    SelfRadio,
 };
 
 struct Settings {
     // [Radio]
-    StationMode mode = StationMode::SelfRadio;
-    std::string station = "RADIO_19_USER";
+    StationMode mode = StationMode::Replace;
+    std::string station = "RADIO_02_POP";
     std::string fallback_station = "RADIO_01_CLASS_ROCK";
     // Ask the game to un-hide the station on the wheel.
     bool unlock_station = true;
     // Allow the station to keep playing on foot through the phone radio.
     bool mobile_radio = true;
-    // Replace mode: stop the hijacked station's own timeline while we own it.
-    bool freeze_native_station = true;
+    // Replace mode: how to silence the station we are standing in for, in
+    // order. Scene and Freeze leave the radio wheel untouched; VehicleOff and
+    // DisableRadio are heavier and can take the station off the wheel while
+    // they are applied.
+    //   Scene        - start a stock audio scene that mutes the radio
+    //   Freeze       - stop the station's own timeline
+    //   VehicleOff   - hold the vehicle's radio on OFF
+    //   DisableRadio - disable the vehicle's radio outright
+    std::string mute_strategies = "Scene,Freeze";
     // Replace mode: audio scenes tried in order until one reports active.
     std::string mute_scenes =
         "MP_JOB_CHANGE_RADIO_MUTE,FBI_HEIST_H5_MUTE_RADIO_SCENE,"

@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstring>
 #include <sstream>
 #include <utility>
 #include <vector>
@@ -58,6 +59,14 @@ bool SpotifyRadio::initialize() {
 
     settings_ = Settings::load(module_directory_ / "GtaSpotifyRadio.ini");
     previous_station_ = settings_.fallback_station;
+
+    for (const std::string& strategy : split_list(settings_.mute_strategies)) {
+        if (_stricmp(strategy.c_str(), "Scene") == 0) mute_with_scene_ = true;
+        else if (_stricmp(strategy.c_str(), "Freeze") == 0) mute_with_freeze_ = true;
+        else if (_stricmp(strategy.c_str(), "VehicleOff") == 0) mute_with_vehicle_off_ = true;
+        else if (_stricmp(strategy.c_str(), "DisableRadio") == 0) mute_with_disable_radio_ = true;
+        else log::error("Unknown Radio/MuteStrategies entry '" + strategy + "'");
+    }
 
     if (!player_.initialize(settings_.fade_ms, settings_.buffer_ms, settings_.cabin_filter)) {
         log::error("Audio initialization failed");
@@ -167,7 +176,7 @@ void SpotifyRadio::connect_worker() {
 void SpotifyRadio::tick() {
     player_.heartbeat();
 
-    const RadioSnapshot snapshot = probe_.poll(settings_);
+    const RadioSnapshot snapshot = probe_.poll(settings_, station_reads_off_);
     update_station(snapshot);
 
     MixTarget target;
@@ -176,6 +185,7 @@ void SpotifyRadio::tick() {
     target.cutoff_hz = snapshot.cutoff_hz;
     player_.set_target(target);
 
+    if (settings_.mode == StationMode::Replace && station_held_) apply_frame_mutes();
     update_stream(snapshot);
     update_hotkeys();
     publish_pending_notification();
@@ -199,35 +209,73 @@ void SpotifyRadio::update_station(const RadioSnapshot& snapshot) {
     }
 }
 
+int SpotifyRadio::player_vehicle() const {
+    const Ped player = PLAYER::PLAYER_PED_ID();
+    return PED::GET_VEHICLE_PED_IS_IN(player, false);
+}
+
+// The heavier strategies have to be re-asserted, because the game turns the
+// radio back on by itself when the player changes vehicle.
+void SpotifyRadio::apply_frame_mutes() {
+    const Vehicle vehicle = player_vehicle();
+    if (vehicle == 0) return;
+    if (mute_with_disable_radio_) AUDIO::SET_VEHICLE_RADIO_ENABLED(vehicle, FALSE);
+    if (mute_with_vehicle_off_) AUDIO::SET_VEH_RADIO_STATION(vehicle, "OFF");
+}
+
 void SpotifyRadio::acquire_station() {
     log::info("Tuned to " + settings_.station);
     if (settings_.mode != StationMode::Replace) return;
 
-    if (settings_.freeze_native_station) {
+    if (mute_with_freeze_) {
         AUDIO::SET_RADIO_AUTO_UNFREEZE(FALSE);
         AUDIO::FREEZE_RADIO_STATION(settings_.station.c_str());
     }
-    for (const std::string& scene : split_list(settings_.mute_scenes)) {
-        AUDIO::START_AUDIO_SCENE(scene.c_str());
-        if (AUDIO::IS_AUDIO_SCENE_ACTIVE(scene.c_str())) {
-            active_mute_scene_ = scene;
-            log::info("Muting the native station with audio scene " + scene);
-            return;
+
+    if (mute_with_scene_) {
+        bool started = false;
+        for (const std::string& scene : split_list(settings_.mute_scenes)) {
+            AUDIO::START_AUDIO_SCENE(scene.c_str());
+            if (AUDIO::IS_AUDIO_SCENE_ACTIVE(scene.c_str())) {
+                active_mute_scene_ = scene;
+                log::info("Mute audio scene started: " + scene);
+                started = true;
+                break;
+            }
+            AUDIO::STOP_AUDIO_SCENE(scene.c_str());
+            log::info("Mute audio scene not available: " + scene);
         }
-        AUDIO::STOP_AUDIO_SCENE(scene.c_str());
+        if (!started) {
+            log::error("No mute audio scene started. If the native station is still "
+                       "audible under Spotify, add VehicleOff to Radio/MuteStrategies.");
+        }
     }
-    log::error("No configured mute audio scene started; the native station may still "
-               "be audible under Spotify");
+
+    apply_frame_mutes();
+
+    // Record whether our own muting hid the station, so the probe keeps
+    // treating a reported "OFF" as us rather than going silent.
+    const std::string after = current_station_name();
+    station_reads_off_ = after == "OFF";
+    log::info("Station reads '" + after + "' after muting" +
+              (station_reads_off_ ? " (holding it as ours)" : ""));
 }
 
 void SpotifyRadio::release_station() {
+    station_reads_off_ = false;
     if (!active_mute_scene_.empty()) {
         AUDIO::STOP_AUDIO_SCENE(active_mute_scene_.c_str());
         active_mute_scene_.clear();
     }
-    if (settings_.mode == StationMode::Replace && settings_.freeze_native_station) {
+    if (settings_.mode != StationMode::Replace) return;
+
+    if (mute_with_freeze_) {
         AUDIO::UNFREEZE_RADIO_STATION(settings_.station.c_str());
         AUDIO::SET_RADIO_AUTO_UNFREEZE(TRUE);
+    }
+    const Vehicle vehicle = player_vehicle();
+    if (vehicle != 0 && mute_with_disable_radio_) {
+        AUDIO::SET_VEHICLE_RADIO_ENABLED(vehicle, TRUE);
     }
 }
 
@@ -270,7 +318,7 @@ void SpotifyRadio::tune_to(const std::string& station) {
 void SpotifyRadio::update_hotkeys() {
     if (GetAsyncKeyState(settings_.key_toggle) & 1) {
         const std::string current = current_station_name();
-        if (current == settings_.station) {
+        if (current == settings_.station || station_reads_off_) {
             tune_to(previous_station_);
             notify("Radio: " + previous_station_);
         } else {

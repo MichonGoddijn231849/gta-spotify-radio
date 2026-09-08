@@ -60,26 +60,26 @@ float db_to_linear(float db) {
 Settings Settings::load(const std::filesystem::path& ini_path) {
     Settings s;
 
-    const std::wstring mode = read_string(ini_path, L"Radio", L"Mode", L"SelfRadio");
-    if (_wcsicmp(mode.c_str(), L"Replace") == 0) {
-        s.mode = StationMode::Replace;
-    } else {
+    const std::wstring mode = read_string(ini_path, L"Radio", L"Mode", L"Replace");
+    if (_wcsicmp(mode.c_str(), L"SelfRadio") == 0) {
         s.mode = StationMode::SelfRadio;
-        if (_wcsicmp(mode.c_str(), L"SelfRadio") != 0) {
+    } else {
+        s.mode = StationMode::Replace;
+        if (_wcsicmp(mode.c_str(), L"Replace") != 0) {
             log::error("Unknown Radio/Mode '" + narrow_ascii(mode) +
-                       "', falling back to SelfRadio");
+                       "', falling back to Replace");
         }
     }
 
     const wchar_t* default_station =
-        s.mode == StationMode::Replace ? L"RADIO_02_POP" : L"RADIO_19_USER";
+        s.mode == StationMode::SelfRadio ? L"RADIO_19_USER" : L"RADIO_02_POP";
     s.station = narrow_ascii(read_string(ini_path, L"Radio", L"Station", default_station));
     s.fallback_station = narrow_ascii(
         read_string(ini_path, L"Radio", L"FallbackStation", L"RADIO_01_CLASS_ROCK"));
     s.unlock_station = read_bool(ini_path, L"Radio", L"UnlockStation", s.unlock_station);
     s.mobile_radio = read_bool(ini_path, L"Radio", L"MobileRadio", s.mobile_radio);
-    s.freeze_native_station =
-        read_bool(ini_path, L"Radio", L"FreezeNativeStation", s.freeze_native_station);
+    s.mute_strategies = narrow_ascii(
+        read_string(ini_path, L"Radio", L"MuteStrategies", L"Scene,Freeze"));
     s.mute_scenes = narrow_ascii(
         read_string(ini_path, L"Radio", L"MuteScenes",
                     L"MP_JOB_CHANGE_RADIO_MUTE,FBI_HEIST_H5_MUTE_RADIO_SCENE,"
@@ -135,7 +135,7 @@ Settings Settings::load(const std::filesystem::path& ini_path) {
 
     log::info("Station mode: " +
               std::string(s.mode == StationMode::Replace ? "Replace" : "SelfRadio") +
-              ", station " + s.station);
+              ", station " + s.station + ", mute " + s.mute_strategies);
     return s;
 }
 

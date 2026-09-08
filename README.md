@@ -34,18 +34,20 @@ exactly where it stopped instead of skipping ahead.
 ## Getting a slot on the radio wheel
 
 GTA V Enhanced does not let a plugin add a station to the wheel without RPF
-audio-metadata modding, so the plugin takes one of two routes, chosen with
-`Mode` in `GtaSpotifyRadio.ini`:
+audio-metadata modding, so the plugin stands in for an existing one instead.
+`Mode=Replace` takes over the station named by `Station` (default
+`RADIO_02_POP`): it keeps its wheel entry and name, the game's own version of
+it is silenced while you are tuned in, and it is restored when you retune away.
 
-- **`SelfRadio` (default)** — rides on Self Radio (`RADIO_19_USER`). The plugin
-  writes a long silent MP3 into your GTA user music folder, which is what makes
-  Self Radio appear on the wheel and gives it something inaudible to "play".
-  The native station, its wheel entry and the whole radio state machine are
-  real; only the audio comes from this plugin. Rescan user music once in
-  Settings > Audio after first launch.
-- **`Replace`** — takes over an existing station such as `RADIO_02_POP`. While
-  you are tuned to it the native station is frozen and muted through an audio
-  scene, and it is restored when you retune away.
+Silencing is done with a stock audio scene, the same mechanism the game's own
+missions use, plus freezing the station's timeline. If that does not take on a
+given build, `MuteStrategies` in the ini adds heavier options — see
+[INSTALL.md](INSTALL.md).
+
+`Mode=SelfRadio` rides on Self Radio with a generated silent placeholder track
+instead. It does **not** work on GTA V Enhanced: the game never indexes user
+music, so Self Radio stays off the wheel even with ordinary MP3s in the folder.
+It is kept for Legacy only.
 
 ## Controls
 

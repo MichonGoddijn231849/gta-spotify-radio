@@ -29,7 +29,9 @@ struct RadioSnapshot {
 // doing right now.
 class GameAudioProbe {
 public:
-    RadioSnapshot poll(const Settings& settings);
+    // own_off_station is set once our own muting has taken the station off
+    // the wheel, so a reported "OFF" still counts as us being tuned in.
+    RadioSnapshot poll(const Settings& settings, bool own_off_station);
 
     int music_slider() const { return music_slider_; }
 

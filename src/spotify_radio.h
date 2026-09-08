@@ -32,6 +32,10 @@ private:
     void update_station(const RadioSnapshot& snapshot);
     void acquire_station();
     void release_station();
+    void apply_frame_mutes();
+    // Vehicle handle, or 0. Typed as int so this header need not pull in
+    // the ScriptHookV types.
+    int player_vehicle() const;
 
     void update_stream(const RadioSnapshot& snapshot);
     void update_hotkeys();
@@ -60,6 +64,12 @@ private:
 
     bool announced_ready_ = false;
     bool station_held_ = false;
+    // Set when our own muting has taken the station off the radio wheel.
+    bool station_reads_off_ = false;
+    bool mute_with_scene_ = false;
+    bool mute_with_freeze_ = false;
+    bool mute_with_vehicle_off_ = false;
+    bool mute_with_disable_radio_ = false;
     bool stream_running_ = false;
     std::string active_mute_scene_;
     std::string previous_station_ = "RADIO_01_CLASS_ROCK";
