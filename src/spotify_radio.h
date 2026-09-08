@@ -62,10 +62,12 @@ private:
     // Set when the pause came from the Spotify app rather than from us, so we
     // do not fight the user by resuming behind their back.
     std::atomic<bool> paused_by_user_{false};
+    // When we last paused the stream ourselves, so the echo of it coming back
+    // through Connect is not read as the player pausing.
+    std::atomic<int64_t> self_paused_ms_{0};
 
     bool announced_ready_ = false;
     bool station_held_ = false;
-    bool was_retuning_ = false;
     // Set when our own muting has taken the station off the radio wheel.
     bool station_reads_off_ = false;
     bool mute_with_scene_ = false;

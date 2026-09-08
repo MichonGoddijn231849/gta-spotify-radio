@@ -34,6 +34,7 @@ add_library(GtaSpotifyRadio SHARED
     src/settings.cpp
     src/silent_track.cpp
     src/spotify_radio.cpp
+    src/station_ownership.cpp
     src/xaudio_player.cpp
 )
 set_target_properties(GtaSpotifyRadio PROPERTIES

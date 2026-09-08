@@ -60,6 +60,7 @@
     <ClCompile Include="src\settings.cpp" />
     <ClCompile Include="src\silent_track.cpp" />
     <ClCompile Include="src\spotify_radio.cpp" />
+    <ClCompile Include="src\station_ownership.cpp" />
     <ClCompile Include="src\xaudio_player.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -68,6 +69,7 @@
     <ClInclude Include="src\settings.h" />
     <ClInclude Include="src\silent_track.h" />
     <ClInclude Include="src\spotify_radio.h" />
+    <ClInclude Include="src\station_ownership.h" />
     <ClInclude Include="src\xaudio_player.h" />
   </ItemGroup>
   <ItemGroup>

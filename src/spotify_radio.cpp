@@ -2,6 +2,7 @@
 
 #include "log.h"
 #include "silent_track.h"
+#include "station_ownership.h"
 
 #include <Windows.h>
 #include <natives.h>
@@ -139,7 +140,12 @@ void SpotifyRadio::connect_worker() {
                 break;
             case librespotc::EventType::PlaybackPaused:
                 spotify_playing_.store(false, std::memory_order_release);
-                if (from_cloud) paused_by_user_.store(true, std::memory_order_release);
+                // Our own pause can come back around through Connect. Treating
+                // that as the player pausing would leave us never resuming.
+                if (from_cloud &&
+                    now_ms() - self_paused_ms_.load(std::memory_order_acquire) > 2000) {
+                    paused_by_user_.store(true, std::memory_order_release);
+                }
                 break;
             case librespotc::EventType::BecameInactive:
                 spotify_playing_.store(false, std::memory_order_release);
@@ -204,6 +210,8 @@ void SpotifyRadio::tick() {
 
 void SpotifyRadio::set_owned(bool owned) {
     if (owned == station_held_) return;
+    log::info(std::string(owned ? "Taking" : "Releasing") + " the radio (station reads '" +
+              current_station_name() + "')");
     station_held_ = owned;
     if (owned) {
         acquire_station();
@@ -212,35 +220,22 @@ void SpotifyRadio::set_owned(bool owned) {
     }
 }
 
-// Deciding who owns the radio has to account for our own muting: silencing the
-// station we stand in for means switching the radio to OFF, so the game stops
-// reporting our station back to us and we cannot simply read the selection.
-//
-// The radio wheel stays usable because we let go of the radio for as long as
-// the player is actually retuning, and only re-read the selection once they
-// have settled on something.
 void SpotifyRadio::update_ownership() {
-    const bool retuning = AUDIO::IS_RADIO_RETUNING() != 0;
-    const std::string current = current_station_name();
-    const bool settled = was_retuning_ && !retuning;
-    was_retuning_ = retuning;
+    OwnershipInputs inputs;
+    inputs.current_station = current_station_name();
+    inputs.our_station = settings_.station;
+    inputs.retuning = AUDIO::IS_RADIO_RETUNING() != 0;
+    inputs.owned = station_held_;
+    inputs.holding_off = station_reads_off_;
 
-    if (retuning) {
-        // Hands off the radio: whatever the player picks must stick.
-        return;
+    set_owned(decide_ownership(inputs));
+
+    // Re-assert the muting every frame: the game switches the radio back on by
+    // itself when the player changes vehicle. Not while retuning, though, or
+    // the wheel would be unusable.
+    if (station_held_ && !inputs.retuning && settings_.mode == StationMode::Replace) {
+        apply_frame_mutes();
     }
-
-    if (settled) {
-        // The player just chose a station, so the selection is theirs alone.
-        set_owned(current == settings_.station);
-    } else if (!station_held_) {
-        set_owned(current == settings_.station);
-    } else if (!station_reads_off_ && current != settings_.station) {
-        // Something else retuned us without going through the wheel.
-        set_owned(false);
-    }
-
-    if (station_held_ && settings_.mode == StationMode::Replace) apply_frame_mutes();
 }
 
 int SpotifyRadio::player_vehicle() const {
@@ -285,14 +280,14 @@ void SpotifyRadio::acquire_station() {
         }
     }
 
+    // Whether our muting takes the station off the wheel follows from the
+    // strategies alone. It cannot be read back here: the natives below only
+    // take effect once the game runs a frame, so the station still reports its
+    // old name for the rest of this one.
+    station_reads_off_ = mute_with_vehicle_off_ || mute_with_disable_radio_;
     apply_frame_mutes();
-
-    // Record whether our own muting hid the station, so the rest of the
-    // plugin keeps treating a reported "OFF" as us rather than going silent.
-    const std::string after = current_station_name();
-    station_reads_off_ = after == "OFF";
-    log::info("Station reads '" + after + "' after muting" +
-              (station_reads_off_ ? " (holding it as ours)" : ""));
+    log::info(std::string("Holding ") + settings_.station +
+              (station_reads_off_ ? " with the radio switched off" : " with the radio on"));
 }
 
 void SpotifyRadio::release_station() {
@@ -325,6 +320,7 @@ void SpotifyRadio::update_stream(const RadioSnapshot& snapshot) {
         if (!stream_running_ && !paused_by_user_.load(std::memory_order_acquire)) {
             session_->resume();
             stream_running_ = true;
+            log::info("Resuming the Spotify stream");
         }
         return;
     }
@@ -337,8 +333,10 @@ void SpotifyRadio::update_stream(const RadioSnapshot& snapshot) {
         silent_since_ms_ = now;
     }
     if (now - silent_since_ms_ >= settings_.stream_pause_delay_ms) {
+        self_paused_ms_.store(now, std::memory_order_release);
         session_->pause_at_audio_boundary();
         stream_running_ = false;
+        log::info("Holding the Spotify stream");
     }
 }
 
