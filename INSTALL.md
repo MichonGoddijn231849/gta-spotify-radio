@@ -45,6 +45,7 @@ data.
 - F9: pause/resume
 - F10: next track in the received Spotify context
 - F8: previous track
+- Page Up / Page Down: trim the volume live
 
 ## Tuning it
 
@@ -54,9 +55,9 @@ Everything below lives in `GtaSpotifyRadio.ini`.
   `MuteStrategies`, as above.
 - **Nothing plays at all** — check `GtaSpotifyRadio.log` for the station name
   it sees, then try `RespectGameRadioFade=0` under `[Mix]`.
-- **Too quiet or too loud next to the other stations** — adjust `VolumeDb`
-  under `[Audio]`. It is a straight dB trim on top of Spotify's loudness
-  normalisation.
+- **Too quiet or too loud next to the other stations** — press Page Up and
+  Page Down while driving. Each press reports the level on screen; write the
+  one you settle on into `VolumeDb` under `[Audio]` so it sticks.
 - **Music slider does nothing** — check `FollowMusicSlider=1`, or pin a level
   with `MusicSliderOverride` (0-10).
 - **Ducking under dialogue is too strong or too weak** — `DialogueDuckDb`.

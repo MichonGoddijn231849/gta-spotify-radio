@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdio>
 #include <cstring>
 #include <sstream>
 #include <utility>
@@ -362,6 +363,24 @@ void SpotifyRadio::update_hotkeys() {
             set_owned(true);
             notify("Radio: Spotify");
         }
+    }
+
+    // Matching a native station by ear is much easier from inside the car
+    // than by editing the ini and restarting, so the trim moves live.
+    const auto nudge_volume = [this](float delta) {
+        settings_.volume_db =
+            std::clamp(settings_.volume_db + delta, -60.0f, 12.0f);
+        char text[64]{};
+        std::snprintf(text, sizeof(text), "Spotify volume: %+.1f dB",
+                      static_cast<double>(settings_.volume_db));
+        log::info(text);
+        notify(text);
+    };
+    if (GetAsyncKeyState(settings_.key_volume_up) & 1) {
+        nudge_volume(settings_.volume_step_db);
+    }
+    if (GetAsyncKeyState(settings_.key_volume_down) & 1) {
+        nudge_volume(-settings_.volume_step_db);
     }
 
     std::lock_guard lock(session_mutex_);

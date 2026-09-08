@@ -57,6 +57,7 @@ It is kept for Legacy only.
 - F9: pause/resume
 - F10: next queued track
 - F8: previous track
+- Page Up / Page Down: trim the volume live to match the native stations
 
 Keys, volume, ducking, muffling and fade times are all configurable in
 `GtaSpotifyRadio.ini`.

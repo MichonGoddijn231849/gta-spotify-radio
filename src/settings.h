@@ -49,9 +49,11 @@ struct Settings {
     std::wstring user_music_dir;
 
     // [Audio]
-    // Trim applied on top of Spotify's loudness normalisation. Native GTA
-    // radio is mastered hotter than Spotify's -14 LUFS target.
-    float volume_db = 2.0f;
+    // Trim applied on top of Spotify's loudness normalisation. Our voice goes
+    // out at the master mix level while a native station sits well below it,
+    // so this is a cut, not a boost. It is a by-ear calibration -- the volume
+    // hotkeys move it live.
+    float volume_db = -9.0f;
     // Track the in-game Music slider through GET_MUSIC_VOL_SLIDER.
     bool follow_music_slider = true;
     // Exponent mapping the 0..10 slider onto linear amplitude.
@@ -88,6 +90,9 @@ struct Settings {
     int key_play_pause = VK_F9;
     int key_next = VK_F10;
     int key_previous = VK_F8;
+    int key_volume_up = VK_PRIOR;
+    int key_volume_down = VK_NEXT;
+    float volume_step_db = 1.0f;
 
     static Settings load(const std::filesystem::path& ini_path);
 };

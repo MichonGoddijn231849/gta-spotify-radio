@@ -132,6 +132,10 @@ Settings Settings::load(const std::filesystem::path& ini_path) {
     s.key_play_pause = read_int(ini_path, L"Controls", L"PlayPause", s.key_play_pause);
     s.key_next = read_int(ini_path, L"Controls", L"Next", s.key_next);
     s.key_previous = read_int(ini_path, L"Controls", L"Previous", s.key_previous);
+    s.key_volume_up = read_int(ini_path, L"Controls", L"VolumeUp", s.key_volume_up);
+    s.key_volume_down = read_int(ini_path, L"Controls", L"VolumeDown", s.key_volume_down);
+    s.volume_step_db = std::clamp(
+        read_float(ini_path, L"Controls", L"VolumeStepDb", s.volume_step_db), 0.1f, 6.0f);
 
     log::info("Station mode: " +
               std::string(s.mode == StationMode::Replace ? "Replace" : "SelfRadio") +
