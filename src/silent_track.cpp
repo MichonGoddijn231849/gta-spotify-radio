@@ -59,21 +59,26 @@ std::wstring to_lower(std::wstring value) {
 }
 
 // Higher is a better guess at "this is the GTA install the player is running".
+// Rockstar spells the Enhanced folder "GTAV Enhanced" but the Legacy one
+// "GTA V", so compare with spaces stripped rather than matching literals.
 int score_game_folder(const std::filesystem::path& folder) {
-    const std::wstring name = to_lower(folder.filename().wstring());
-    int score = 0;
-    if (name.find(L"gta") != std::wstring::npos ||
-        name.find(L"grand theft auto") != std::wstring::npos) {
-        score = 1;
-    }
-    if (score == 0) return 0;
-    if (name.find(L"enhanced") != std::wstring::npos) score = 3;
-    else if (name == L"gta v" || name == L"grand theft auto v") score = 2;
+    std::wstring name = to_lower(folder.filename().wstring());
+    name.erase(std::remove(name.begin(), name.end(), L' '), name.end());
 
-    // An existing User Music folder is the strongest signal there is.
+    if (name.find(L"gta") == std::wstring::npos &&
+        name.find(L"grandtheftauto") == std::wstring::npos) {
+        return 0;
+    }
+    int score = 1;
+    if (name.find(L"enhanced") != std::wstring::npos) score = 3;
+    else if (name == L"gtav" || name == L"grandtheftautov") score = 2;
+
+    // The name decides which game this is; an existing User Music folder only
+    // breaks ties within a tier. Otherwise leftover Legacy user music would
+    // outrank the Enhanced install this plugin actually runs in.
     std::error_code ec;
-    if (std::filesystem::is_directory(folder / "User Music", ec)) score += 10;
-    return score;
+    const bool has_music = std::filesystem::is_directory(folder / "User Music", ec);
+    return score * 10 + (has_music ? 1 : 0);
 }
 
 void append_id3_text_frame(std::vector<uint8_t>& tag, const char (&id)[5],
