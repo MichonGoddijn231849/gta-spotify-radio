@@ -91,15 +91,13 @@ float GameAudioProbe::slider_gain(const Settings& settings) {
     return std::pow(std::clamp(normalized, 0.0f, 1.0f), settings.slider_curve);
 }
 
-RadioSnapshot GameAudioProbe::poll(const Settings& settings, bool own_off_station) {
+RadioSnapshot GameAudioProbe::poll(const Settings& settings, const StationState& station) {
     RadioSnapshot snap;
 
     const Ped player = PLAYER::PLAYER_PED_ID();
     if (!ENTITY::DOES_ENTITY_EXIST(player)) return snap;
 
-    const std::string current = current_station_name();
-    snap.station_selected =
-        current == settings.station || (own_off_station && current == "OFF");
+    snap.station_selected = station.owned;
     if (!snap.station_selected) return snap;
 
     Vehicle vehicle = PED::GET_VEHICLE_PED_IS_IN(player, false);
@@ -118,7 +116,7 @@ RadioSnapshot GameAudioProbe::poll(const Settings& settings, bool own_off_statio
     if (vehicle != 0) {
         // Once we have switched the native radio off ourselves, its own
         // on/off state no longer says anything about what we should do.
-        if (!own_off_station && !AUDIO::IS_VEHICLE_RADIO_ON(vehicle)) return snap;
+        if (!station.forced_off && !AUDIO::IS_VEHICLE_RADIO_ON(vehicle)) return snap;
         if (!VEHICLE::IS_VEHICLE_DRIVEABLE(vehicle, false)) return snap;
         if (!VEHICLE::GET_IS_VEHICLE_ENGINE_RUNNING(vehicle)) return snap;
     }
@@ -128,7 +126,7 @@ RadioSnapshot GameAudioProbe::poll(const Settings& settings, bool own_off_statio
     // Treat those as a duck rather than a hold so the stream keeps rolling.
     // A radio we switched off ourselves reads as permanently faded out, which
     // would otherwise silence us for good.
-    const bool game_faded = settings.respect_game_radio_fade && !own_off_station &&
+    const bool game_faded = settings.respect_game_radio_fade && !station.forced_off &&
                             AUDIO::IS_RADIO_FADED_OUT() != 0;
     const bool retuning = AUDIO::IS_RADIO_RETUNING() != 0;
 

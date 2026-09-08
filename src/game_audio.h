@@ -25,13 +25,21 @@ struct RadioSnapshot {
     int vehicle = 0;
 };
 
+// Who currently owns the radio, decided by SpotifyRadio rather than re-derived
+// here, because silencing the native station changes what the game reports.
+struct StationState {
+    // Spotify is the station the player is listening to.
+    bool owned = false;
+    // We switched the vehicle radio off ourselves to silence the station we
+    // stand in for, so the game's own radio state says nothing useful.
+    bool forced_off = false;
+};
+
 // Reads the game each frame and reports what a native radio station would be
 // doing right now.
 class GameAudioProbe {
 public:
-    // own_off_station is set once our own muting has taken the station off
-    // the wheel, so a reported "OFF" still counts as us being tuned in.
-    RadioSnapshot poll(const Settings& settings, bool own_off_station);
+    RadioSnapshot poll(const Settings& settings, const StationState& station);
 
     int music_slider() const { return music_slider_; }
 

@@ -79,7 +79,7 @@ Settings Settings::load(const std::filesystem::path& ini_path) {
     s.unlock_station = read_bool(ini_path, L"Radio", L"UnlockStation", s.unlock_station);
     s.mobile_radio = read_bool(ini_path, L"Radio", L"MobileRadio", s.mobile_radio);
     s.mute_strategies = narrow_ascii(
-        read_string(ini_path, L"Radio", L"MuteStrategies", L"Scene,Freeze"));
+        read_string(ini_path, L"Radio", L"MuteStrategies", L"Scene,Freeze,VehicleOff"));
     s.mute_scenes = narrow_ascii(
         read_string(ini_path, L"Radio", L"MuteScenes",
                     L"MP_JOB_CHANGE_RADIO_MUTE,FBI_HEIST_H5_MUTE_RADIO_SCENE,"

@@ -176,8 +176,12 @@ void SpotifyRadio::connect_worker() {
 void SpotifyRadio::tick() {
     player_.heartbeat();
 
-    const RadioSnapshot snapshot = probe_.poll(settings_, station_reads_off_);
-    update_station(snapshot);
+    update_ownership();
+
+    StationState station;
+    station.owned = station_held_;
+    station.forced_off = station_reads_off_;
+    const RadioSnapshot snapshot = probe_.poll(settings_, station);
 
     MixTarget target;
     target.playing = snapshot.station_selected && !snapshot.held;
@@ -185,7 +189,6 @@ void SpotifyRadio::tick() {
     target.cutoff_hz = snapshot.cutoff_hz;
     player_.set_target(target);
 
-    if (settings_.mode == StationMode::Replace && station_held_) apply_frame_mutes();
     update_stream(snapshot);
     update_hotkeys();
     publish_pending_notification();
@@ -199,14 +202,45 @@ void SpotifyRadio::tick() {
     }
 }
 
-void SpotifyRadio::update_station(const RadioSnapshot& snapshot) {
-    if (snapshot.station_selected == station_held_) return;
-    station_held_ = snapshot.station_selected;
-    if (station_held_) {
+void SpotifyRadio::set_owned(bool owned) {
+    if (owned == station_held_) return;
+    station_held_ = owned;
+    if (owned) {
         acquire_station();
     } else {
         release_station();
     }
+}
+
+// Deciding who owns the radio has to account for our own muting: silencing the
+// station we stand in for means switching the radio to OFF, so the game stops
+// reporting our station back to us and we cannot simply read the selection.
+//
+// The radio wheel stays usable because we let go of the radio for as long as
+// the player is actually retuning, and only re-read the selection once they
+// have settled on something.
+void SpotifyRadio::update_ownership() {
+    const bool retuning = AUDIO::IS_RADIO_RETUNING() != 0;
+    const std::string current = current_station_name();
+    const bool settled = was_retuning_ && !retuning;
+    was_retuning_ = retuning;
+
+    if (retuning) {
+        // Hands off the radio: whatever the player picks must stick.
+        return;
+    }
+
+    if (settled) {
+        // The player just chose a station, so the selection is theirs alone.
+        set_owned(current == settings_.station);
+    } else if (!station_held_) {
+        set_owned(current == settings_.station);
+    } else if (!station_reads_off_ && current != settings_.station) {
+        // Something else retuned us without going through the wheel.
+        set_owned(false);
+    }
+
+    if (station_held_ && settings_.mode == StationMode::Replace) apply_frame_mutes();
 }
 
 int SpotifyRadio::player_vehicle() const {
@@ -253,8 +287,8 @@ void SpotifyRadio::acquire_station() {
 
     apply_frame_mutes();
 
-    // Record whether our own muting hid the station, so the probe keeps
-    // treating a reported "OFF" as us rather than going silent.
+    // Record whether our own muting hid the station, so the rest of the
+    // plugin keeps treating a reported "OFF" as us rather than going silent.
     const std::string after = current_station_name();
     station_reads_off_ = after == "OFF";
     log::info("Station reads '" + after + "' after muting" +
@@ -317,13 +351,17 @@ void SpotifyRadio::tune_to(const std::string& station) {
 
 void SpotifyRadio::update_hotkeys() {
     if (GetAsyncKeyState(settings_.key_toggle) & 1) {
-        const std::string current = current_station_name();
-        if (current == settings_.station || station_reads_off_) {
+        if (station_held_) {
+            // Let go of the radio before retuning, so the restore is not
+            // fighting our own muting.
+            set_owned(false);
             tune_to(previous_station_);
             notify("Radio: " + previous_station_);
         } else {
+            const std::string current = current_station_name();
             if (current != "OFF") previous_station_ = current;
             tune_to(settings_.station);
+            set_owned(true);
             notify("Radio: Spotify");
         }
     }

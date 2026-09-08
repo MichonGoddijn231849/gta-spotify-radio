@@ -36,7 +36,7 @@ struct Settings {
     //   Freeze       - stop the station's own timeline
     //   VehicleOff   - hold the vehicle's radio on OFF
     //   DisableRadio - disable the vehicle's radio outright
-    std::string mute_strategies = "Scene,Freeze";
+    std::string mute_strategies = "Scene,Freeze,VehicleOff";
     // Replace mode: audio scenes tried in order until one reports active.
     std::string mute_scenes =
         "MP_JOB_CHANGE_RADIO_MUTE,FBI_HEIST_H5_MUTE_RADIO_SCENE,"

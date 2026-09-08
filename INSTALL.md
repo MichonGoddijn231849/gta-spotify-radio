@@ -18,21 +18,16 @@ inside the cabin and from outside the car.
 Spotify plays in that station's place. Pick a different station to stand in
 for with `Station` in `GtaSpotifyRadio.ini`.
 
-### If you can hear the native station under Spotify
+### Why the wheel reads OFF while Spotify plays
 
-The plugin silences the station it stands in for with a stock audio scene,
-which is the same mechanism the game's own missions use. If that does not take
-on your build, add the heavier strategy:
+No native mutes a radio station while it stays selected, so silencing the
+station this plugin stands in for means switching the vehicle radio to OFF.
+The radio wheel still works normally: the plugin lets go of the radio for as
+long as you are retuning, and only takes it back once you settle on its
+station again. Pick any other station and the native radio plays as usual.
 
-```ini
-[Radio]
-MuteStrategies=Scene,Freeze,VehicleOff
-```
-
-`VehicleOff` reliably silences it, at the cost of holding the radio wheel on
-OFF while Spotify is active, so **F7 becomes the only way to change station**.
-`GtaSpotifyRadio.log` records which audio scene started and what the station
-reads afterwards.
+The cost is cosmetic. While Spotify is playing the wheel and HUD read OFF
+rather than the station name.
 
 ### Self Radio
 

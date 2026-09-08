@@ -39,10 +39,12 @@ audio-metadata modding, so the plugin stands in for an existing one instead.
 `RADIO_02_POP`): it keeps its wheel entry and name, the game's own version of
 it is silenced while you are tuned in, and it is restored when you retune away.
 
-Silencing is done with a stock audio scene, the same mechanism the game's own
-missions use, plus freezing the station's timeline. If that does not take on a
-given build, `MuteStrategies` in the ini adds heavier options — see
-[INSTALL.md](INSTALL.md).
+No native mutes a station while it stays selected — `SET_RADIO_POSITION_AUDIO_MUTE`
+sounds like it would but is a nullsub — so silencing the station means
+switching the vehicle radio to OFF. The radio wheel still works: the plugin
+lets go of the radio while the player is retuning and only takes it back once
+they settle on its station again. The cost is cosmetic, the wheel reads OFF
+rather than the station name while Spotify plays.
 
 `Mode=SelfRadio` rides on Self Radio with a generated silent placeholder track
 instead. It does **not** work on GTA V Enhanced: the game never indexes user

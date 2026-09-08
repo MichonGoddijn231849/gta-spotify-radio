@@ -29,7 +29,8 @@ private:
     void prepare_self_radio();
     void apply_persistent_audio_flags();
 
-    void update_station(const RadioSnapshot& snapshot);
+    void update_ownership();
+    void set_owned(bool owned);
     void acquire_station();
     void release_station();
     void apply_frame_mutes();
@@ -64,6 +65,7 @@ private:
 
     bool announced_ready_ = false;
     bool station_held_ = false;
+    bool was_retuning_ = false;
     // Set when our own muting has taken the station off the radio wheel.
     bool station_reads_off_ = false;
     bool mute_with_scene_ = false;
