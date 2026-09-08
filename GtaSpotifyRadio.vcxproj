@@ -45,7 +45,7 @@
       <AdditionalIncludeDirectories>$(ProjectDir)src;$(ProjectDir)vendor\librespotclib\include;$(ProjectDir)vendor\scripthookv-template\extern\scripthookv\inc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>ScriptHookV.lib;librespotc.lib;xaudio2.lib;ole32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>ScriptHookV.lib;librespotc.lib;xaudio2.lib;ole32.lib;shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(ProjectDir)vendor\scripthookv-template\extern\scripthookv\lib;$(ProjectDir)vendor\librespotclib\bin;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <GenerateDebugInformation>false</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -54,13 +54,19 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="src\game_audio.cpp" />
     <ClCompile Include="src\log.cpp" />
     <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="src\settings.cpp" />
+    <ClCompile Include="src\silent_track.cpp" />
     <ClCompile Include="src\spotify_radio.cpp" />
     <ClCompile Include="src\xaudio_player.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="src\game_audio.h" />
     <ClInclude Include="src\log.h" />
+    <ClInclude Include="src\settings.h" />
+    <ClInclude Include="src\silent_track.h" />
     <ClInclude Include="src\spotify_radio.h" />
     <ClInclude Include="src\xaudio_player.h" />
   </ItemGroup>

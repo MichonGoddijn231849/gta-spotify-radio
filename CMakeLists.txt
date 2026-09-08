@@ -28,8 +28,11 @@ target_compile_options(librespotc PRIVATE
 target_link_libraries(librespotc PUBLIC bcrypt winhttp winmm ws2_32)
 
 add_library(GtaSpotifyRadio SHARED
+    src/game_audio.cpp
     src/log.cpp
     src/main.cpp
+    src/settings.cpp
+    src/silent_track.cpp
     src/spotify_radio.cpp
     src/xaudio_player.cpp
 )
@@ -54,6 +57,7 @@ target_link_libraries(GtaSpotifyRadio PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/vendor/scripthookv-template/extern/scripthookv/lib/ScriptHookV.lib"
     xaudio2
     ole32
+    shell32
 )
 
 add_executable(SpotifyReceiverTest
