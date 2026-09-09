@@ -1,15 +1,22 @@
 name: Release
 
-# Pushing a v* tag builds the plugin and publishes it. The release notes are
-# taken from the tag's own message, so the tag is the single place a release
-# is described:
+# Two ways in, both publishing the same thing:
+#   - push a v* tag, or
+#   - run this workflow manually with the version to release, in which case
+#     the tag is created as part of publishing.
 #
-#   git tag -a v0.2.0 -m "..." && git push origin v0.2.0
+# Release notes come from the matching section of CHANGELOG.md.
 
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Version to release, e.g. v0.2.0'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -21,8 +28,39 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-          # Needed for the annotated tag object, which carries the notes.
-          fetch-depth: 0
+
+      - name: Resolve version
+        shell: pwsh
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          $tag = if ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch') {
+            $env:INPUT_TAG
+          } else {
+            $env:GITHUB_REF_NAME
+          }
+          if ($tag -notmatch '^v\d+\.\d+\.\d+') {
+            throw "Version '$tag' is not of the form vMAJOR.MINOR.PATCH"
+          }
+          "RELEASE_TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Collect release notes
+        shell: pwsh
+        run: |
+          $section = @()
+          $inSection = $false
+          foreach ($line in Get-Content CHANGELOG.md) {
+            if ($line -match '^##\s+(\S+)') {
+              if ($inSection) { break }
+              $inSection = ($Matches[1] -eq $env:RELEASE_TAG)
+              continue
+            }
+            if ($inSection) { $section += $line }
+          }
+          if (($section -join '').Trim() -eq '') {
+            throw "CHANGELOG.md has no '## $env:RELEASE_TAG' section"
+          }
+          $section -join "`n" | Out-File -FilePath notes.md -Encoding utf8
 
       - uses: ilammy/msvc-dev-cmd@v1
         with:
@@ -43,30 +81,15 @@ jobs:
           Copy-Item INSTALL.md package\
           Copy-Item LICENSE package\
           Copy-Item THIRD_PARTY_NOTICES.md package\
-          Compress-Archive -Path package\* -DestinationPath "GtaSpotifyRadio-$env:GITHUB_REF_NAME.zip"
-
-      - name: Collect release notes
-        shell: pwsh
-        run: |
-          $notes = git tag -l --format='%(contents)' $env:GITHUB_REF_NAME
-          if ([string]::IsNullOrWhiteSpace($notes)) {
-            # A lightweight tag carries no message; fall back to generated notes.
-            "generate=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          } else {
-            $notes | Out-File -FilePath notes.md -Encoding utf8
-            "generate=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          }
-        id: notes
+          Compress-Archive -Path package\* -DestinationPath "GtaSpotifyRadio-$env:RELEASE_TAG.zip"
 
       - name: Publish
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $zip = "GtaSpotifyRadio-$env:GITHUB_REF_NAME.zip"
-          $title = "GTA Spotify Radio $env:GITHUB_REF_NAME"
-          if ("${{ steps.notes.outputs.generate }}" -eq "true") {
-            gh release create $env:GITHUB_REF_NAME $zip --title $title --generate-notes
-          } else {
-            gh release create $env:GITHUB_REF_NAME $zip --title $title --notes-file notes.md
-          }
+          gh release create $env:RELEASE_TAG `
+            "GtaSpotifyRadio-$env:RELEASE_TAG.zip" `
+            --title "GTA Spotify Radio $env:RELEASE_TAG" `
+            --notes-file notes.md `
+            --target $env:GITHUB_SHA
